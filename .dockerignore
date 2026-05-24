@@ -1,0 +1,14 @@
+# Keep the build context small and avoid copying host-specific or secret files.
+node_modules
+.next
+.git
+.gitignore
+npm-debug.log*
+
+# Secrets — never bake env files into the image (Next loads .env.local from the
+# bind mount at runtime instead). The committed template is allowed.
+.env*
+!.env.example
+
+# Not needed in the image
+*.pdf

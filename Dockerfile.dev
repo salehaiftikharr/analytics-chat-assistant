@@ -1,0 +1,22 @@
+# Development image: runs the Next.js dev server with hot reload.
+# The source is bind-mounted via docker-compose, so edits on the host are
+# picked up live inside the container.
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Install dependencies first for better layer caching. `npm ci` uses the
+# lockfile for reproducible installs and pulls the correct Linux-native
+# binaries (e.g. Next.js SWC / Turbopack) for the container's platform —
+# which is why we don't reuse the host's macOS node_modules.
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy the rest of the source. In dev this is shadowed by the bind mount,
+# but it lets the image run on its own too.
+COPY . .
+
+EXPOSE 3000
+
+# Bind to 0.0.0.0 so the dev server is reachable from the host.
+CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0"]

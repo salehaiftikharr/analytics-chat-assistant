@@ -1,0 +1,23 @@
+# Development stack. Run with: docker compose up --build
+# (The Postgres service is added in step 2; for now this runs the app.)
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      # Live-mount the source so code edits hot-reload inside the container...
+      - .:/app
+      # ...but keep the container's own node_modules (Linux-native binaries),
+      # so the host's macOS modules don't shadow them.
+      - node_modules:/app/node_modules
+    environment:
+      # Best-effort file-watch polling for reliable hot reload on macOS bind
+      # mounts (harmless if the watcher already gets native events).
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+
+volumes:
+  node_modules:
