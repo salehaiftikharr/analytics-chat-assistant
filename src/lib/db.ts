@@ -1,11 +1,9 @@
 import { Pool, type PoolConfig, type QueryResultRow } from "pg";
+import { MAX_ROWS } from "@/lib/constants";
 
-/**
- * Hard cap on how many rows a single read query returns to the caller. This is
- * a safety net; step 7 additionally injects an enforced SQL LIMIT into
- * LLM-generated queries.
- */
-export const MAX_ROWS = 1000;
+// The row cap lives in constants.ts (no DB imports) so the SQL validator can
+// share it; re-export here for callers that already import it from db.
+export { MAX_ROWS };
 
 // In dev, Next.js hot-reloads modules, which would otherwise create a brand new
 // pool on every reload and exhaust Postgres connections. Stash the pools on the
