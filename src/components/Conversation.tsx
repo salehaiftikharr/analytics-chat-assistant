@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import MessageList from "./MessageList";
@@ -9,11 +9,14 @@ import MessageInput from "./MessageInput";
 interface ConversationProps {
   conversationId: string;
   initialMessages: UIMessage[];
+  /** Called after an answer finishes (and is saved) so the sidebar can refresh. */
+  onPersisted?: () => void;
 }
 
 export default function Conversation({
   conversationId,
   initialMessages,
+  onPersisted,
 }: ConversationProps) {
   // Send the conversation id alongside every request so the server saves under
   // it. Memoized so we don't rebuild the transport on each render.
@@ -33,6 +36,16 @@ export default function Conversation({
   });
 
   const isBusy = status === "submitted" || status === "streaming";
+
+  // When a response finishes (streaming -> ready), the server has persisted the
+  // conversation; tell the parent so the sidebar list/title updates.
+  const prevStatus = useRef(status);
+  useEffect(() => {
+    if (prevStatus.current === "streaming" && status === "ready") {
+      onPersisted?.();
+    }
+    prevStatus.current = status;
+  }, [status, onPersisted]);
 
   return (
     <div className="chat">

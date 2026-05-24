@@ -54,3 +54,34 @@ function textOf(message: UIMessage): string {
     .map((part) => part.text ?? "")
     .join("\n");
 }
+
+export interface ConversationSummary {
+  conversationId: string;
+  title: string;
+  updatedAt: string;
+}
+
+/**
+ * Lists saved conversations for the sidebar, newest first. The title is the
+ * first user message; ordering is by most-recently-updated. Derived from the
+ * messages table, so a brand-new (empty) chat only appears after its first save.
+ */
+export async function listConversations(): Promise<ConversationSummary[]> {
+  const { rows } = await getAppPool().query<{
+    conversation_id: string;
+    title: string | null;
+    updated_at: string;
+  }>(`
+    SELECT conversation_id,
+           max(created_at) AS updated_at,
+           (array_agg(content ORDER BY id) FILTER (WHERE role = 'user'))[1] AS title
+    FROM messages
+    GROUP BY conversation_id
+    ORDER BY updated_at DESC
+  `);
+  return rows.map((row) => ({
+    conversationId: row.conversation_id,
+    title: (row.title ?? "").trim() || "Untitled chat",
+    updatedAt: row.updated_at,
+  }));
+}
