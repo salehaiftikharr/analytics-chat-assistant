@@ -1,5 +1,4 @@
 # Development stack. Run with: docker compose up --build
-# (The Postgres service is added in step 2; for now this runs the app.)
 services:
   web:
     build:
@@ -18,6 +17,35 @@ services:
       # mounts (harmless if the watcher already gets native events).
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
+    depends_on:
+      # Wait for Postgres to pass its healthcheck before starting the app
+      # (the app starts using the DB in step 3).
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      # Superuser/admin — used only for init and migrations. The app connects
+      # as the scoped aca_readonly / aca_app roles created in db/init/04_roles.sql.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: analytics
+    ports:
+      # Exposed to the host so you can connect with psql / a GUI at localhost:5432.
+      - "5432:5432"
+    volumes:
+      # Persistent data directory.
+      - postgres_data:/var/lib/postgresql/data
+      # Init scripts run (in filename order) on FIRST boot only — i.e. when the
+      # data volume is empty. To re-run them after changes: docker compose down -v
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   node_modules:
+  postgres_data:
