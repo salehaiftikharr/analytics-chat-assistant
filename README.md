@@ -6,34 +6,38 @@ region last year?"* and receive a bar chart plus the underlying numbers, right
 in the conversation. Conversations persist across page reloads, and the LLM
 backend is **switchable between Anthropic and OpenAI** via one env var.
 
-> **Status:** Planning. This document is a proposal for review — no application
-> code has been written yet.
+> **Status:** In progress. Steps 1–5 are complete and committed; step 6 (the
+> Vercel AI SDK provider layer) is underway.
 
 ---
 
 ## 1. What we're building (the core idea)
 
-The heart of the app is a loop that turns a sentence into data:
+The heart of the app is a loop that turns a sentence into data, orchestrated by
+the **Vercel AI SDK**:
 
 ```
-User question ──▶ LLM provider (with DB schema) ──▶ validated SQL ──▶ Postgres
-                  (Anthropic │ OpenAI)                                   │
-   Chat UI  ◀── chart + stats ◀── result + chart spec ◀─────────────────┘
-        │
+useChat (UI) ──▶ /api/chat ──▶ streamText(model, tools) ──┐
+                                (Anthropic │ OpenAI)       │ model calls the
+                                                           ▼ queryDatabase tool
+   Chat UI  ◀──── streamed text + chart ◀──── { rows, chartSpec } ◀── Postgres
+        │                                          (validated, read-only)
         └──▶ every message saved to / loaded from the `messages` table
 ```
 
-1. The user types a question in a chat interface.
-2. The backend hands that question — plus a description of the dataset's
-   schema — to the configured **LLM provider** (Anthropic or OpenAI).
-3. The provider responds with a **structured plan**: a read-only SQL query *and*
-   a suggestion for how to visualize the result (chart type, axes, etc.).
-4. The backend **validates** the SQL (single read-only `SELECT`), runs it
-   against Postgres with a row limit and timeout, and returns rows + chart spec.
-5. The frontend renders the result inline as a Recharts chart and/or a stat
-   summary, appended to the chat thread.
-6. The question and its answer are **persisted** to the database, so reloading
-   the page restores the conversation.
+1. The user types a question; the `useChat` hook streams it to `/api/chat`.
+2. The route calls the AI SDK's `streamText` with the active **model**
+   (Anthropic or OpenAI, chosen by `LLM_PROVIDER`) plus a `queryDatabase` tool
+   and a system prompt containing the schema description.
+3. The model calls `queryDatabase` with a read-only `SELECT` and a `chartSpec`.
+   The tool **validates** the SQL and runs it via the read-only pool, returning
+   `{ rows, chartSpec }`.
+4. The model writes a one-sentence summary; the SDK **streams** the text and the
+   tool result back to the browser.
+5. The frontend renders the tool result inline as a Recharts chart (the AI SDK
+   "generative UI" pattern), alongside the streamed summary.
+6. Each message (with its parts) is **persisted** to the database, so reloading
+   restores the conversation — and follow-up questions keep prior context.
 
 ---
 
@@ -45,17 +49,20 @@ Confirmed during planning — these shape the build:
    + a read-only DB role (flexible, handles open-ended questions).
 2. **Dataset:** an invented **e-commerce orders** dataset (customers, products,
    orders, order_items), swappable later.
-3. **Conversation memory:** each question is **independent** in v1 — answers are
-   persisted and reloaded, but the LLM does *not* yet use prior turns as
-   context. (The schema leaves room to add this later.)
-4. **Streaming:** build **non-streaming first**; add streaming at the end if
-   time allows.
+3. **Conversation memory:** **on.** `useChat` sends the thread to the model, so
+   follow-up questions ("now break that down by month") keep prior context.
+4. **Streaming:** **native** via the AI SDK (`streamText` + `useChat`) — answers
+   stream from the first build, not as a later add-on.
 5. **Docker:** the **app runs in Docker during development too** — a
    containerized Next.js dev server with hot reload (source bind-mounted, a
    `node_modules` volume keeps the container's Linux binaries). The same Compose
    stack carries through to the final deliverable: `docker compose up` with only
    Docker installed. A production-optimized image (`Dockerfile`) is added near
    the end; dev uses `Dockerfile.dev`.
+6. **LLM orchestration:** the **Vercel AI SDK** is the provider abstraction.
+   Switching Anthropic ↔ OpenAI is just choosing which model the SDK is handed
+   (`LLM_PROVIDER`); the SDK normalizes prompts, tool calls, structured output,
+   and streaming behind one `LanguageModel` interface.
 
 ---
 
@@ -64,13 +71,14 @@ Confirmed during planning — these shape the build:
 | Piece | Role |
 |-------|------|
 | **Next.js (App Router) + TypeScript** | Full-stack framework. Serves the chat UI (React) *and* hosts the backend API route — one codebase, one deploy. |
-| **API Route (`/api/chat`)** | The brain. Receives the question, calls the active LLM provider, validates + runs SQL, persists the exchange, returns rows + chart spec. All trust boundaries live here. |
-| **LLM provider layer** | A common interface with two implementations (Anthropic, OpenAI), selected at runtime by `LLM_PROVIDER`. Each turns NL → `{ sql, chartSpec, summary }` via structured output / tool calling. |
-| **Anthropic SDK / OpenAI SDK** | The two concrete provider clients behind the interface. |
+| **API Route (`/api/chat`)** | The brain. Runs `streamText` with the active model + the `queryDatabase` tool, persists the exchange, and streams the result. All trust boundaries live here. |
+| **Vercel AI SDK (`ai`)** | Provider abstraction + orchestration. `streamText` runs the model with the `queryDatabase` tool and streams text + tool results. One `LanguageModel` interface for every vendor. |
+| **`@ai-sdk/anthropic` / `@ai-sdk/openai`** | Provider packages. `getModel()` returns one or the other based on `LLM_PROVIDER`; everything downstream is identical. |
+| **`@ai-sdk/react` (`useChat`)** | React hook that manages the chat thread, input, and streaming on the client and talks to `/api/chat`. |
 | **PostgreSQL** | Stores **two things**: the analytics dataset (queried read-only) and the app's own `messages` table (read-write). |
 | **`pg` (node-postgres)** | Connection pooling. Two roles: a **read-only role** for LLM-generated SQL, and an **app role** for reading/writing chat history. |
-| **Persistence layer** | Saves each user question + assistant answer to `messages`, and loads history on page load. |
-| **Recharts** | Renders bar/line/area/pie charts inline in the chat from the returned rows + chart spec. |
+| **Persistence layer** | Saves each user/assistant message (with parts) to `messages`, and loads history on page load. |
+| **Recharts** | Renders bar/line/area/pie charts inline in the chat from the tool result (rows + chart spec). |
 | **Docker Compose** | Runs Postgres (dev) or Postgres **+ the app** (final) with one command. Seeds the DB from `db/init` on first boot. |
 | **SQL validation layer** | Guards the trust boundary: rejects anything that isn't a single `SELECT`, blocks DDL/DML, enforces `LIMIT`. |
 | **Schema introspection** | Builds the human-readable schema description fed to the LLM so it knows what analytics tables/columns exist. |
@@ -82,7 +90,7 @@ Confirmed during planning — these shape the build:
 ```
 analytics-chat-assistant/
 ├── README.md                      # this file
-├── docker-compose.yml             # dev stack: app (+ Postgres from step 2)
+├── docker-compose.yml             # dev stack: app + Postgres
 ├── Dockerfile.dev                 # dev image: Next.js dev server + hot reload
 ├── Dockerfile                     # production image (added near the end)
 ├── .dockerignore
@@ -106,10 +114,10 @@ analytics-chat-assistant/
     │   ├── globals.css
     │   └── api/
     │       └── chat/
-    │           └── route.ts       # POST: ask a question | GET: load history
+    │           └── route.ts       # POST: streamText chat | GET: load history
     │
     ├── components/
-    │   ├── ChatWindow.tsx         # container + state, fetches history
+    │   ├── ChatWindow.tsx         # uses useChat; renders streamed messages
     │   ├── MessageList.tsx        # scrollable thread
     │   ├── MessageInput.tsx       # text box + send button
     │   ├── StatCard.tsx           # single-number / summary stat
@@ -122,13 +130,9 @@ analytics-chat-assistant/
     ├── lib/
     │   ├── db.ts                  # pg pools: readOnlyPool + appPool
     │   ├── llm/
-    │   │   ├── providers/
-    │   │   │   ├── types.ts       # LLMProvider interface + shared types
-    │   │   │   ├── anthropic.ts   # Anthropic implementation
-    │   │   │   ├── openai.ts      # OpenAI implementation
-    │   │   │   └── index.ts       # factory: pick provider from LLM_PROVIDER
+    │   │   ├── model.ts           # getModel(): LLM_PROVIDER → AI SDK LanguageModel
     │   │   ├── prompt.ts          # system prompt + schema context
-    │   │   └── tools.ts           # structured-output / tool definitions
+    │   │   └── tools.ts           # the queryDatabase AI SDK tool (+ chartSpec schema)
     │   ├── query/
     │   │   ├── validate.ts        # SQL guardrails (SELECT-only, etc.)
     │   │   └── execute.ts         # run validated SQL via readOnlyPool
@@ -138,7 +142,7 @@ analytics-chat-assistant/
     │       └── describe.ts        # produce analytics-schema text for the LLM
     │
     └── types/
-        └── index.ts              # shared types: Message, ChartSpec, etc.
+        └── index.ts              # shared types (Message, etc.)
 ```
 
 **Why it's shaped this way:** UI (`components/`) is separate from logic
@@ -147,23 +151,22 @@ analytics-chat-assistant/
 single API route is the only place that wires them together, keeping the trust
 boundary auditable.
 
-### The provider abstraction (the key extensibility point)
+### The provider seam (the key extensibility point)
 
-`llm/providers/types.ts` defines one interface — conceptually:
+The Vercel AI SDK defines one `LanguageModel` interface; each provider package
+implements it. Switching vendors is a single function, `llm/model.ts`:
 
 ```
-interface LLMProvider {
-  name: string
-  generateQueryPlan(question, schemaDescription): Promise<QueryPlan>
-}
-// QueryPlan = { sql, chartSpec, summary }
+getModel() = LLM_PROVIDER === "openai"
+  ? openai(OPENAI_MODEL ?? "gpt-4.1")
+  : anthropic(ANTHROPIC_MODEL ?? "claude-opus-4-7")
 ```
 
-`anthropic.ts` and `openai.ts` each implement it; `index.ts` is a factory that
-reads `LLM_PROVIDER` (`"anthropic"` | `"openai"`) and returns the right one.
-**Nothing outside `providers/` knows which vendor is active** — the API route
-just calls `getProvider().generateQueryPlan(...)`. Adding a third provider later
-means adding one file and one switch case, nothing else.
+Everything downstream — the system prompt, the `queryDatabase` tool, structured
+output, streaming, and the `useChat` hook — is identical regardless of vendor.
+The SDK translates each provider's native message/tool/stream formats behind the
+interface. Adding a third provider is: install its `@ai-sdk/*` package, add one
+`case` to `getModel()`, document its API key. Nothing else changes.
 
 ### Two database roles (the key safety point)
 
@@ -172,7 +175,7 @@ Persistence needs *write* access; LLM-generated SQL must never have it. So:
 - **`appPool`** uses an app role with read/write on `messages` only — used by
   `persistence/messages.ts`.
 - **`readOnlyPool`** uses a read-only role with `SELECT` on the analytics tables
-  only — used by `query/execute.ts` for generated SQL.
+  only — used by `query/execute.ts` inside the `queryDatabase` tool.
 
 Even a query that slips past validation cannot write, drop, or touch `messages`.
 
@@ -180,19 +183,21 @@ Even a query that slips past validation cannot write, drop, or touch `messages`.
 
 ## 5. The request lifecycle (one question, end to end)
 
-1. On load, **`ChatWindow`** does `GET /api/chat` → `persistence/messages.ts`
-   returns prior messages → thread is restored.
-2. **`MessageInput`** captures a question; **`ChatWindow`** POSTs it to
-   `/api/chat`.
-3. **`route.ts`** saves the user message, pulls the schema from
-   `schema/describe.ts`, builds the prompt (`llm/prompt.ts`).
-4. **`llm/providers/index.ts`** returns the active provider; its
-   `generateQueryPlan` returns `{ sql, chartSpec, summary }`.
-5. **`query/validate.ts`** confirms a single safe `SELECT`;
-   **`query/execute.ts`** runs it via `readOnlyPool`.
-6. **`route.ts`** saves the assistant answer (rows + chartSpec) to `messages`
-   and returns it to the client.
-7. **`ChartRenderer`** + **`StatCard`** render the answer inline.
+1. On mount, **`ChatWindow`** loads prior messages (`GET /api/chat`, via
+   `persistence/messages.ts`) and seeds `useChat`'s initial messages.
+2. The user submits a question; **`useChat`** streams the thread to
+   `POST /api/chat`.
+3. **`route.ts`** builds the system prompt from `schema/describe.ts` and calls
+   the AI SDK's **`streamText`** with `getModel()`, the conversation, and the
+   `queryDatabase` tool.
+4. The model calls **`queryDatabase({ sql, chartSpec })`**; the tool's `execute`
+   runs `query/validate.ts` then `query/execute.ts` (read-only pool) and returns
+   `{ rows, chartSpec }`.
+5. The model writes a summary; `streamText` **streams** the text + tool result
+   to the browser as message parts.
+6. On finish, **`route.ts`** persists the messages (parts) to `messages`.
+7. **`ChartRenderer`** renders the tool-result part inline; the summary text
+   renders alongside it.
 
 ---
 
@@ -200,52 +205,43 @@ Even a query that slips past validation cannot write, drop, or touch `messages`.
 
 Each step is independently runnable/verifiable before moving on.
 
-1. **Scaffold the project + Docker dev server.** Next.js + TypeScript app;
-   install deps (`pg`, `@anthropic-ai/sdk`, `openai`, `recharts`); add
-   `.env.example` (`LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, DB
-   URLs); add `Dockerfile.dev` + `docker-compose.yml` to run the dev server in a
-   container with hot reload. *Verify:* `docker compose up` serves a blank page
-   on `localhost:3000` and edits hot-reload.
-2. **Stand up Postgres in Docker.** `docker-compose.yml` (Postgres only) +
-   `db/init`: analytics schema, seed data, `messages` table, and the read-only
-   role + grants. *Verify:* `docker compose up`, then query both the analytics
-   tables and `messages` manually.
-3. **Connect the app to the DB.** Build `lib/db.ts` with `readOnlyPool` and
-   `appPool` (timeouts, row caps). *Verify:* a temp route reads seed data via
-   the read-only pool and writes/reads `messages` via the app pool.
-4. **Static chat UI.** `ChatWindow`, `MessageList`, `MessageInput` with local
-   state and hardcoded messages. *Verify:* messages render, input works.
-5. **Schema description.** `schema/describe.ts` produces the analytics
-   table/column text for the LLM. *Verify:* log it; matches the seed schema.
-6. **Provider abstraction.** Define `providers/types.ts`; implement
-   `anthropic.ts` and `openai.ts`; wire the `index.ts` factory to `LLM_PROVIDER`.
-   *Verify:* run a sample question through **each** provider and compare the
-   structured output by flipping one env var.
-7. **SQL guardrails.** `query/validate.ts` (SELECT-only, block DDL/DML/multiple
-   statements/comments, force `LIMIT`) and `query/execute.ts`. *Verify:*
-   unit-test that bad queries are rejected and good ones pass.
-8. **Wire the API route (POST).** `app/api/chat/route.ts` end to end: question →
-   provider → validate → execute → response. *Verify:* `curl` a question and get
-   rows + chart spec back.
-9. **Chart rendering.** `ChartRenderer` + Recharts chart components driven by
-   `chartSpec`. *Verify:* a real question renders a real chart inline.
-10. **Connect UI to API.** `ChatWindow` calls POST `/api/chat` and appends the
-    rendered answer. *Verify:* full loop works from the browser.
-11. **Chat persistence.** Build `persistence/messages.ts`; have the POST handler
-    save each exchange and add a GET handler to load history; `ChatWindow`
-    fetches it on mount. *Verify:* reload the page — the conversation is still
-    there.
-12. **Error & empty states.** Handle no-rows, invalid SQL, provider failures,
-    timeouts. *Verify:* trigger each path on purpose.
-13. **Production image.** Add a production-optimized multi-stage `Dockerfile`
-    (build + run, no dev tooling) and a production Compose profile/file.
-    *Verify:* on a clean checkout with only Docker installed, the production
-    stack comes up and the app works in the browser.
-14. **Streaming (if time allows).** Stream the answer progressively instead of
-    waiting. *Verify:* tokens/result appear incrementally; non-streaming path
-    still works as fallback.
-15. **Polish & docs.** Loading indicators, basic styling, finalize this README
-    with run instructions for both dev and Docker modes.
+1. **Scaffold the project + Docker dev server.** Next.js + TypeScript app; deps;
+   `.env.example`; `Dockerfile.dev` + `docker-compose.yml` with hot reload.
+   *Verify:* `docker compose up` serves a page on `localhost:3000`; edits reload.
+   ✅ done
+2. **Stand up Postgres in Docker.** `db/init`: analytics schema, seed data,
+   `messages` table, read-only role + grants. *Verify:* query the tables. ✅ done
+3. **Connect the app to the DB.** `lib/db.ts` with `readOnlyPool` + `appPool`
+   (timeouts, row caps). *Verify:* a temp route round-trips both pools. ✅ done
+4. **Static chat UI.** `ChatWindow`, `MessageList`, `MessageInput`. *Verify:*
+   messages render, input works. ✅ done (container rewired to `useChat` in 10)
+5. **Schema description.** `schema/describe.ts`. *Verify:* matches seed. ✅ done
+6. **AI SDK provider layer.** Install `ai`, `@ai-sdk/anthropic`,
+   `@ai-sdk/openai`, `@ai-sdk/react`, `zod` (remove the raw SDKs). Build
+   `llm/model.ts` (`getModel()`), revise `llm/prompt.ts`, and define the
+   `queryDatabase` tool in `llm/tools.ts`. *Verify:* run a question through
+   **each** provider by flipping `LLM_PROVIDER`.
+7. **SQL guardrails.** `query/validate.ts` (SELECT-only; block DDL/DML/multiple
+   statements/comments; force `LIMIT`) + `query/execute.ts`, called inside the
+   tool's `execute`. *Verify:* unit-test that bad queries are rejected.
+8. **Chat API route (streaming).** `app/api/chat/route.ts`: `streamText` with
+   the model + `queryDatabase` tool, returned as a UI message stream. *Verify:*
+   `curl` the route and watch a streamed answer with tool results.
+9. **Chart rendering.** `ChartRenderer` + Recharts components driven by the
+   `chartSpec` in the tool-result message part. *Verify:* a real question
+   renders a real chart.
+10. **Connect UI with `useChat`.** Rewire `ChatWindow` to the `useChat` hook;
+    render text parts + tool-result parts (charts). *Verify:* full loop works in
+    the browser, streaming live.
+11. **Chat persistence.** `persistence/messages.ts`; save on `streamText`'s
+    `onFinish`, add the `GET` history handler, seed `useChat` on mount. *Verify:*
+    reload — the conversation (and its context) is still there.
+12. **Error & empty states.** Handle no-rows, invalid SQL (model retry on tool
+    error), provider failures, timeouts. *Verify:* trigger each path.
+13. **Production image.** Multi-stage `Dockerfile` + production Compose. *Verify:*
+    clean checkout, Docker-only, `docker compose up` serves the app.
+14. **Polish & docs.** Loading/streaming indicators, styling, finalize this
+    README with run instructions for dev and Docker modes.
 
 ---
 
@@ -264,4 +260,4 @@ Generated SQL touching a database is the main risk area; defended in layers:
 
 ---
 
-*Reply with any changes, or say "go" and I'll start at step 1.*
+*Plan revised for the Vercel AI SDK. Steps 1–5 are done; step 6 is in progress.*
