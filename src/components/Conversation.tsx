@@ -26,7 +26,7 @@ export default function Conversation({
     [conversationId],
   );
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, stop, regenerate } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
@@ -40,6 +40,24 @@ export default function Conversation({
         <h1>Analytics Chat Assistant</h1>
       </header>
       <MessageList messages={messages} busy={isBusy} error={error} />
+      {(isBusy || status === "error") && (
+        <div className="chat-controls">
+          {isBusy && (
+            <button type="button" className="chat-control" onClick={() => stop()}>
+              Stop
+            </button>
+          )}
+          {status === "error" && (
+            <button
+              type="button"
+              className="chat-control"
+              onClick={() => regenerate()}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )}
       <MessageInput onSend={(text) => sendMessage({ text })} disabled={isBusy} />
     </div>
   );
