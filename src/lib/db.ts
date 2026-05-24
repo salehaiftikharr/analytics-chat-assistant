@@ -5,9 +5,12 @@ import { MAX_ROWS } from "@/lib/constants";
 // share it; re-export here for callers that already import it from db.
 export { MAX_ROWS };
 
-// In dev, Next.js hot-reloads modules, which would otherwise create a brand new
-// pool on every reload and exhaust Postgres connections. Stash the pools on the
-// global object so they survive reloads.
+// Pools are created lazily on first use (not at import time) for two reasons:
+//  - `next build` evaluates route modules to collect metadata, and the build
+//    environment has no DATABASE_URL_*; eager creation would throw and fail the
+//    build.
+//  - In dev, Next.js hot-reloads modules; stashing the pools on the global keeps
+//    a single pool across reloads instead of leaking connections.
 const globalForDb = globalThis as unknown as {
   __readOnlyPool?: Pool;
   __appPool?: Pool;
@@ -43,20 +46,21 @@ function createPool(connectionString: string | undefined, label: string): Pool {
  * SELECT on the analytics tables only — no writes, and no access to `messages`
  * (enforced in db/init/04_roles.sql).
  */
-export const readOnlyPool: Pool =
-  globalForDb.__readOnlyPool ??
-  createPool(process.env.DATABASE_URL_READONLY, "read-only");
+export function getReadOnlyPool(): Pool {
+  globalForDb.__readOnlyPool ??= createPool(
+    process.env.DATABASE_URL_READONLY,
+    "read-only",
+  );
+  return globalForDb.__readOnlyPool;
+}
 
 /**
  * Pool for chat persistence. Connects as the app role, which can read/write the
  * `messages` table only — no access to the analytics tables.
  */
-export const appPool: Pool =
-  globalForDb.__appPool ?? createPool(process.env.DATABASE_URL_APP, "app");
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__readOnlyPool = readOnlyPool;
-  globalForDb.__appPool = appPool;
+export function getAppPool(): Pool {
+  globalForDb.__appPool ??= createPool(process.env.DATABASE_URL_APP, "app");
+  return globalForDb.__appPool;
 }
 
 /**
@@ -67,7 +71,7 @@ export async function readOnlyQuery<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  const result = await readOnlyPool.query<T>(text, params as unknown[]);
+  const result = await getReadOnlyPool().query<T>(text, params as unknown[]);
   return result.rows.slice(0, MAX_ROWS);
 }
 
@@ -78,6 +82,6 @@ export async function appQuery<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  const result = await appPool.query<T>(text, params as unknown[]);
+  const result = await getAppPool().query<T>(text, params as unknown[]);
   return result.rows;
 }

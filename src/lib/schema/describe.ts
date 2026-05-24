@@ -1,4 +1,4 @@
-import { readOnlyPool } from "@/lib/db";
+import { getReadOnlyPool } from "@/lib/db";
 
 /**
  * Produces a human-readable description of the analytics tables for the LLM.
@@ -42,8 +42,9 @@ let cached: string | null = null;
 export async function describeSchema(refresh = false): Promise<string> {
   if (cached && !refresh) return cached;
 
+  const pool = getReadOnlyPool();
   const [tables, columns, pks, fks] = await Promise.all([
-    readOnlyPool.query<TableRow>(`
+    pool.query<TableRow>(`
       SELECT c.relname AS table_name, obj_description(c.oid) AS table_comment
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -52,7 +53,7 @@ export async function describeSchema(refresh = false): Promise<string> {
         AND has_table_privilege(c.oid, 'SELECT')
       ORDER BY c.relname
     `),
-    readOnlyPool.query<ColumnRow>(`
+    pool.query<ColumnRow>(`
       SELECT c.relname                              AS table_name,
              a.attname                              AS column_name,
              format_type(a.atttypid, a.atttypmod)   AS data_type,
@@ -68,7 +69,7 @@ export async function describeSchema(refresh = false): Promise<string> {
         AND NOT a.attisdropped
       ORDER BY c.relname, a.attnum
     `),
-    readOnlyPool.query<PkRow>(`
+    pool.query<PkRow>(`
       SELECT c.relname AS table_name, a.attname AS column_name
       FROM pg_index i
       JOIN pg_class c     ON c.oid = i.indrelid
@@ -78,7 +79,7 @@ export async function describeSchema(refresh = false): Promise<string> {
         AND n.nspname = 'public'
         AND has_table_privilege(c.oid, 'SELECT')
     `),
-    readOnlyPool.query<FkRow>(`
+    pool.query<FkRow>(`
       SELECT con.conrelid::regclass::text  AS table_name,
              att.attname                   AS column_name,
              con.confrelid::regclass::text AS ref_table,

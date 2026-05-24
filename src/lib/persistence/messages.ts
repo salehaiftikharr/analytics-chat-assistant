@@ -1,4 +1,4 @@
-import { appPool } from "@/lib/db";
+import { getAppPool } from "@/lib/db";
 import type { UIMessage } from "ai";
 
 /**
@@ -13,7 +13,7 @@ import type { UIMessage } from "ai";
 export async function loadConversation(
   conversationId: string,
 ): Promise<UIMessage[]> {
-  const { rows } = await appPool.query<{ payload: UIMessage }>(
+  const { rows } = await getAppPool().query<{ payload: UIMessage }>(
     `SELECT payload FROM messages WHERE conversation_id = $1 ORDER BY id ASC`,
     [conversationId],
   );
@@ -24,7 +24,7 @@ export async function saveConversation(
   conversationId: string,
   messages: UIMessage[],
 ): Promise<void> {
-  const client = await appPool.connect();
+  const client = await getAppPool().connect();
   try {
     await client.query("BEGIN");
     await client.query(`DELETE FROM messages WHERE conversation_id = $1`, [

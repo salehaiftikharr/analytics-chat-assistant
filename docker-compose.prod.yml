@@ -1,0 +1,42 @@
+# Production stack — the final deliverable.
+#   1. Copy .env.example to .env.local and add your API key(s).
+#   2. docker compose -f docker-compose.prod.yml up --build
+# Brings up Postgres (seeded from db/init) + the production Next.js image.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      # DB host is the compose service name on the internal network.
+      DATABASE_URL_READONLY: postgres://aca_readonly:readonly_pw@postgres:5432/analytics
+      DATABASE_URL_APP: postgres://aca_app:app_pw@postgres:5432/analytics
+    env_file:
+      # Provider keys + LLM_PROVIDER. Optional so `up` doesn't hard-fail without
+      # it, but the app needs a key to actually answer questions.
+      - path: .env.local
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: analytics
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data_prod:
