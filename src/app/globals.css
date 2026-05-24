@@ -204,3 +204,31 @@ body {
   color: var(--muted);
   font-weight: 600;
 }
+
+/* ── Chat states ─────────────────────────────────────────────────────────── */
+/* Assistant bubbles often hold a chart, so give them more room. */
+.chat-message--assistant .chat-bubble {
+  max-width: 90%;
+}
+
+.chat-empty-hint {
+  margin: auto;
+  text-align: center;
+  color: var(--muted);
+  max-width: 28rem;
+}
+
+.chat-typing {
+  color: var(--muted);
+  letter-spacing: 0.15em;
+}
+
+.chat-error {
+  color: #f87171;
+  font-size: 0.9rem;
+  padding: 0 1.25rem;
+}
+
+.tool-result {
+  margin-top: 0.25rem;
+}
