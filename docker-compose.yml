@@ -1,6 +1,9 @@
 # Development stack. Run with: docker compose up --build
 services:
   web:
+    # Distinct image name so the prod build (docker-compose.prod.yml) can't
+    # clobber the dev image — they'd otherwise share the default name.
+    image: analytics-chat-assistant:dev
     build:
       context: .
       dockerfile: Dockerfile.dev

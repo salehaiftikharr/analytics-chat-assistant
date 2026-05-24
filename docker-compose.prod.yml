@@ -4,6 +4,8 @@
 # Brings up Postgres (seeded from db/init) + the production Next.js image.
 services:
   web:
+    # Distinct image name so this prod build doesn't clobber the dev image.
+    image: analytics-chat-assistant:prod
     build:
       context: .
       dockerfile: Dockerfile

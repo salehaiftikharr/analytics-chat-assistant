@@ -39,7 +39,12 @@ export default function Conversation({
       <header className="chat-header">
         <h1>Analytics Chat Assistant</h1>
       </header>
-      <MessageList messages={messages} busy={isBusy} error={error} />
+      <MessageList
+        messages={messages}
+        pending={status === "submitted"}
+        error={error}
+        onExample={(question) => sendMessage({ text: question })}
+      />
       {(isBusy || status === "error") && (
         <div className="chat-controls">
           {isBusy && (

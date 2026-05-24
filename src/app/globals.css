@@ -211,16 +211,76 @@ body {
   max-width: 90%;
 }
 
-.chat-empty-hint {
+.chat-empty {
   margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.chat-empty-hint {
+  margin: 0;
   text-align: center;
   color: var(--muted);
   max-width: 28rem;
 }
 
+.chat-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.chat-example {
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--fg);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.chat-example:hover {
+  border-color: var(--accent);
+}
+
+/* Animated "assistant is thinking" dots. */
 .chat-typing {
-  color: var(--muted);
-  letter-spacing: 0.15em;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.chat-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: typing 1.2s infinite ease-in-out;
+}
+
+.chat-typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.chat-typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 .chat-error {

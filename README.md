@@ -6,8 +6,47 @@ region last year?"* and receive a bar chart plus the underlying numbers, right
 in the conversation. Conversations persist across page reloads, and the LLM
 backend is **switchable between Anthropic and OpenAI** via one env var.
 
-> **Status:** In progress. Steps 1–5 are complete and committed; step 6 (the
-> Vercel AI SDK provider layer) is underway.
+> **Status:** Complete — all 14 build steps are done. See **Getting started**
+> below to run it.
+
+---
+
+## Getting started
+
+**Prerequisites:** Docker (Desktop). Node.js is optional — only if you want to
+run tooling on the host.
+
+**1. Add your API key(s).** Copy the template and fill in at least one provider
+key:
+
+```bash
+cp .env.example .env.local
+# In .env.local: set ANTHROPIC_API_KEY and/or OPENAI_API_KEY,
+# and choose LLM_PROVIDER=anthropic | openai
+```
+
+**2a. Development** — hot-reloading dev server + Postgres:
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:3000. Edits to `src/` reload live.
+
+**2b. Production** — lean standalone image + Postgres:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
+```
+
+Open http://localhost:3000.
+
+**Switching provider:** set `LLM_PROVIDER` (and optionally `ANTHROPIC_MODEL` /
+`OPENAI_MODEL`) in `.env.local`, then restart — nothing else changes (see §4
+"The provider seam").
+
+**Re-seeding the database:** the `db/init` scripts run on first boot only. To
+reset and re-seed, recreate the volume: `docker compose down -v` then `up`.
 
 ---
 
@@ -203,7 +242,7 @@ Even a query that slips past validation cannot write, drop, or touch `messages`.
 
 ## 6. Build plan (small, reviewable steps)
 
-Each step is independently runnable/verifiable before moving on.
+Each step is independently runnable/verifiable. **All 14 steps are complete.**
 
 1. **Scaffold the project + Docker dev server.** Next.js + TypeScript app; deps;
    `.env.example`; `Dockerfile.dev` + `docker-compose.yml` with hot reload.
@@ -260,4 +299,4 @@ Generated SQL touching a database is the main risk area; defended in layers:
 
 ---
 
-*Plan revised for the Vercel AI SDK. Steps 1–5 are done; step 6 is in progress.*
+*Built with the Vercel AI SDK. All 14 steps complete — see Getting started to run it.*

@@ -8,18 +8,22 @@ import type { Row } from "@/components/charts/chart-common";
 
 interface MessageListProps {
   messages: UIMessage[];
-  busy?: boolean;
+  /** True while waiting for the assistant to start responding. */
+  pending?: boolean;
   error?: Error;
+  onExample?: (question: string) => void;
 }
+
+const EXAMPLES = [
+  "What's revenue by category?",
+  "Show monthly revenue as a line chart",
+  "Top 5 customers by total spend",
+];
 
 /** The shape of our queryDatabase tool result (part.output when available). */
 type QueryOutput = { rowCount: number; rows: Row[]; chartSpec: ChartSpec };
 
-/**
- * Permissive view of a UIMessage part. The AI SDK's part union is heavily
- * generic; for rendering we only need a few fields, so we read them off a
- * narrowed shape rather than wrestle the full generic types.
- */
+/** Permissive view of a UIMessage part (the SDK's part union is heavily generic). */
 type UIPart = {
   type: string;
   text?: string;
@@ -28,21 +32,39 @@ type UIPart = {
   errorText?: string;
 };
 
-export default function MessageList({ messages, busy, error }: MessageListProps) {
+export default function MessageList({
+  messages,
+  pending,
+  error,
+  onExample,
+}: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   // Keep the latest content in view as messages stream in.
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy]);
+  }, [messages, pending]);
 
   return (
     <div className="chat-list">
       {messages.length === 0 ? (
-        <p className="chat-empty-hint">
-          Ask a question about your e-commerce data — e.g. &ldquo;What&rsquo;s
-          revenue by category?&rdquo;
-        </p>
+        <div className="chat-empty">
+          <p className="chat-empty-hint">
+            Ask a question about your e-commerce data.
+          </p>
+          <div className="chat-examples">
+            {EXAMPLES.map((question) => (
+              <button
+                key={question}
+                type="button"
+                className="chat-example"
+                onClick={() => onExample?.(question)}
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : null}
 
       {messages.map((message) => (
@@ -64,9 +86,13 @@ export default function MessageList({ messages, busy, error }: MessageListProps)
         </div>
       ))}
 
-      {busy ? (
+      {pending ? (
         <div className="chat-message chat-message--assistant">
-          <div className="chat-bubble chat-typing">…</div>
+          <div className="chat-bubble chat-typing" aria-label="Assistant is thinking">
+            <span />
+            <span />
+            <span />
+          </div>
         </div>
       ) : null}
 
