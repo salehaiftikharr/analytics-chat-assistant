@@ -17,6 +17,10 @@ services:
       # mounts (harmless if the watcher already gets native events).
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
+      # DB connections use the `postgres` service hostname (Docker network), not
+      # localhost. Scoped roles from db/init/04_roles.sql; local-dev passwords.
+      DATABASE_URL_READONLY: postgres://aca_readonly:readonly_pw@postgres:5432/analytics
+      DATABASE_URL_APP: postgres://aca_app:app_pw@postgres:5432/analytics
     depends_on:
       # Wait for Postgres to pass its healthcheck before starting the app
       # (the app starts using the DB in step 3).
