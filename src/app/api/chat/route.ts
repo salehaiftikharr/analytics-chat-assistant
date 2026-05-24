@@ -8,17 +8,18 @@ import { getModel } from "@/lib/llm/model";
 import { buildSystemPrompt } from "@/lib/llm/prompt";
 import { queryDatabase } from "@/lib/llm/tools";
 import { describeSchema } from "@/lib/schema/describe";
+import { loadConversation, saveConversation } from "@/lib/persistence/messages";
 
 /**
- * The chat endpoint. `useChat` POSTs the whole thread as UIMessages; we run the
- * active model with the queryDatabase tool and stream the answer back as a UI
- * message stream (text + tool-result parts).
- *
- * Conversation memory is on: the full thread is sent to the model, so follow-up
- * questions keep prior context.
+ * POST: run the model with the queryDatabase tool and stream the answer back as
+ * a UI message stream. The whole thread is sent (conversation memory), and the
+ * finished conversation is persisted under `conversationId`.
  */
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const { messages, conversationId }: {
+    messages: UIMessage[];
+    conversationId?: string;
+  } = await req.json();
 
   const schema = await describeSchema();
 
@@ -27,13 +28,35 @@ export async function POST(req: Request) {
     system: buildSystemPrompt(schema),
     messages: await convertToModelMessages(messages),
     tools: { queryDatabase },
-    // Let the model call the tool, see the rows, then write its answer.
     stopWhen: stepCountIs(5),
   });
 
   return result.toUIMessageStreamResponse({
-    // Surface real error messages to the client during development instead of
-    // the SDK's default masked "An error occurred." (hardened in step 12).
+    originalMessages: messages,
+    onFinish: async ({ messages: finalMessages }) => {
+      if (!conversationId) return;
+      try {
+        await saveConversation(conversationId, finalMessages);
+      } catch (error) {
+        console.error("[chat] failed to persist conversation:", error);
+      }
+    },
     onError: (error) => (error instanceof Error ? error.message : String(error)),
   });
+}
+
+/**
+ * GET ?conversationId=... : load a saved conversation so the client can seed
+ * useChat on reload. Returns [] for an unknown/missing id.
+ */
+export async function GET(req: Request) {
+  const conversationId = new URL(req.url).searchParams.get("conversationId");
+  if (!conversationId) return Response.json([]);
+  try {
+    const messages = await loadConversation(conversationId);
+    return Response.json(messages);
+  } catch (error) {
+    console.error("[chat] failed to load conversation:", error);
+    return Response.json([]);
+  }
 }
