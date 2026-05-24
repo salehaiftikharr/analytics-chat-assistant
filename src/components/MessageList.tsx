@@ -67,9 +67,9 @@ export default function MessageList({
         </div>
       ) : null}
 
-      {messages.map((message) => (
+      {messages.map((message, index) => (
         <div
-          key={message.id}
+          key={message.id || index}
           className={`chat-message chat-message--${message.role}`}
         >
           <div className="chat-bubble">

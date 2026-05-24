@@ -61,6 +61,27 @@ export default function ChatApp() {
     setActiveId(id);
   }, []);
 
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      if (!window.confirm("Delete this chat? This can't be undone.")) return;
+      try {
+        await fetch(`/api/conversations?conversationId=${id}`, {
+          method: "DELETE",
+        });
+      } catch {
+        /* a failed delete is non-fatal; the list refresh will reconcile */
+      }
+      await refreshList();
+      // If we deleted the chat we're viewing, drop into a fresh one.
+      if (id === activeId) {
+        const fresh = crypto.randomUUID();
+        localStorage.setItem(ACTIVE_KEY, fresh);
+        setActiveId(fresh);
+      }
+    },
+    [activeId, refreshList],
+  );
+
   return (
     <div className="app">
       <Sidebar
@@ -68,6 +89,7 @@ export default function ChatApp() {
         activeId={activeId}
         onSelect={selectConversation}
         onNew={newConversation}
+        onDelete={deleteConversation}
       />
       <div className="app-main">
         {activeId && initialMessages !== null ? (

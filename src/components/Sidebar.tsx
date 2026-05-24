@@ -7,6 +7,7 @@ interface SidebarProps {
   activeId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
 }
 
 export default function Sidebar({
@@ -14,6 +15,7 @@ export default function Sidebar({
   activeId,
   onSelect,
   onNew,
+  onDelete,
 }: SidebarProps) {
   // A freshly-created chat has no saved messages yet, so it won't be in the
   // list — show it as a "New chat" entry until its first message persists.
@@ -26,29 +28,43 @@ export default function Sidebar({
       </button>
       <nav className="sidebar-list">
         {activeId && !activeIsSaved ? (
-          <button
-            type="button"
-            className="sidebar-item sidebar-item--active"
-            onClick={() => onSelect(activeId)}
-          >
-            New chat
-          </button>
+          <div className="sidebar-item sidebar-item--active">
+            <button
+              type="button"
+              className="sidebar-item-title"
+              onClick={() => onSelect(activeId)}
+            >
+              New chat
+            </button>
+          </div>
         ) : null}
-        {conversations.map((conversation) => (
-          <button
-            key={conversation.conversationId}
-            type="button"
-            className={`sidebar-item${
-              conversation.conversationId === activeId
-                ? " sidebar-item--active"
-                : ""
-            }`}
-            title={conversation.title}
-            onClick={() => onSelect(conversation.conversationId)}
-          >
-            {conversation.title}
-          </button>
-        ))}
+        {conversations.map((conversation) => {
+          const isActive = conversation.conversationId === activeId;
+          return (
+            <div
+              key={conversation.conversationId}
+              className={`sidebar-item${isActive ? " sidebar-item--active" : ""}`}
+            >
+              <button
+                type="button"
+                className="sidebar-item-title"
+                title={conversation.title}
+                onClick={() => onSelect(conversation.conversationId)}
+              >
+                {conversation.title}
+              </button>
+              <button
+                type="button"
+                className="sidebar-delete"
+                aria-label="Delete chat"
+                title="Delete chat"
+                onClick={() => onDelete(conversation.conversationId)}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
       </nav>
     </aside>
   );

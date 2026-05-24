@@ -13,11 +13,14 @@ import type { UIMessage } from "ai";
 export async function loadConversation(
   conversationId: string,
 ): Promise<UIMessage[]> {
-  const { rows } = await getAppPool().query<{ payload: UIMessage }>(
-    `SELECT payload FROM messages WHERE conversation_id = $1 ORDER BY id ASC`,
+  const { rows } = await getAppPool().query<{ id: string; payload: UIMessage }>(
+    `SELECT id, payload FROM messages WHERE conversation_id = $1 ORDER BY id ASC`,
     [conversationId],
   );
-  return rows.map((row) => row.payload);
+  // Guarantee a unique, stable id per message even if an older saved payload
+  // lacks one (some assistant messages were persisted without an id) — React
+  // keys and useChat both require unique ids.
+  return rows.map((row) => ({ ...row.payload, id: row.payload?.id || `db-${row.id}` }));
 }
 
 export async function saveConversation(
@@ -31,10 +34,12 @@ export async function saveConversation(
       conversationId,
     ]);
     for (const message of messages) {
+      // Ensure every stored message has an id (some arrive without one).
+      const stored = { ...message, id: message.id || crypto.randomUUID() };
       await client.query(
         `INSERT INTO messages (conversation_id, role, content, payload)
          VALUES ($1, $2, $3, $4)`,
-        [conversationId, message.role, textOf(message), JSON.stringify(message)],
+        [conversationId, message.role, textOf(message), JSON.stringify(stored)],
       );
     }
     await client.query("COMMIT");
@@ -44,6 +49,13 @@ export async function saveConversation(
   } finally {
     client.release();
   }
+}
+
+/** Permanently delete a conversation and all its messages. */
+export async function deleteConversation(conversationId: string): Promise<void> {
+  await getAppPool().query(`DELETE FROM messages WHERE conversation_id = $1`, [
+    conversationId,
+  ]);
 }
 
 /** Flatten a message's text parts into a single string for the `content` column. */
