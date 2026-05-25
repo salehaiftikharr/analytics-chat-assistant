@@ -51,24 +51,26 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
 
   return (
     <form className="chat-input" onSubmit={handleSubmit}>
-      <textarea
-        ref={ref}
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        placeholder="Ask a question about your data…"
-        aria-label="Message"
-        rows={1}
-        disabled={disabled}
-        autoFocus
-      />
-      <button
-        type="submit"
-        aria-label="Send"
-        disabled={disabled || value.trim().length === 0}
-      >
-        ↑
-      </button>
+      <div className="chat-input-inner">
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask a question about your data…"
+          aria-label="Message"
+          rows={1}
+          disabled={disabled}
+          autoFocus
+        />
+        <button
+          type="submit"
+          aria-label="Send"
+          disabled={disabled || value.trim().length === 0}
+        >
+          ↑
+        </button>
+      </div>
     </form>
   );
 }

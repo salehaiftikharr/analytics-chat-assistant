@@ -201,13 +201,19 @@ body {
   min-width: 0;
 }
 
-/* ── Chat column ─────────────────────────────────────────────────────────── */
+/* ── Chat column (fills the main area; content is centered within) ───────── */
 .chat {
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-width: 860px;
-  margin: 0 auto;
+  width: 100%;
+}
+
+/* Shared centered column for messages, input, and controls. */
+.chat-list,
+.chat-controls,
+.chat-input {
+  --thread-width: 768px;
 }
 
 .chat-header {
@@ -269,23 +275,23 @@ body {
   padding: 1.5rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  align-items: center; /* center the thread column in a full-width area */
+  gap: 1.5rem;
 }
 
 .chat-message {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  max-width: 92%;
+  gap: 0.3rem;
+  width: 100%;
+  max-width: 768px;
 }
 
 .chat-message--user {
-  align-self: flex-end;
   align-items: flex-end;
 }
 
 .chat-message--assistant {
-  align-self: flex-start;
   align-items: flex-start;
 }
 
@@ -307,6 +313,7 @@ body {
 }
 
 .chat-message--user .chat-bubble {
+  max-width: 85%;
   background: var(--accent);
   color: var(--accent-fg);
   border-bottom-right-radius: 5px;
@@ -418,58 +425,80 @@ body {
 }
 
 .chat-error {
+  width: 100%;
+  max-width: var(--thread-width);
+  margin: 0 auto;
   color: var(--danger);
   font-size: 0.9rem;
   padding: 0 1.25rem;
 }
 
-/* ── Input ───────────────────────────────────────────────────────────────── */
+/* ── Input (centered, rounded composer) ──────────────────────────────────── */
 .chat-input {
   display: flex;
+  justify-content: center;
+  padding: 0.5rem 1rem 1.25rem;
+  background: transparent;
+}
+
+.chat-input-inner {
+  display: flex;
   align-items: flex-end;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem 1.1rem;
-  border-top: 1px solid var(--border);
-  background: var(--panel);
+  gap: 0.4rem;
+  width: 100%;
+  max-width: var(--thread-width);
+  padding: 0.4rem 0.4rem 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel-2);
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s;
+}
+
+.chat-input-inner:focus-within {
+  border-color: var(--accent);
 }
 
 .chat-input textarea {
   flex: 1;
   resize: none;
-  max-height: 160px;
-  padding: 0.65rem 0.85rem;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
+  max-height: 200px;
+  padding: 0.5rem 0.4rem;
+  border: none;
+  background: transparent;
   color: var(--fg);
   font: inherit;
-  font-size: 0.95rem;
-  line-height: 1.4;
+  font-size: 0.97rem;
+  line-height: 1.5;
 }
 
 .chat-input textarea:focus {
   outline: none;
-  border-color: var(--accent);
+}
+
+.chat-input textarea::placeholder {
+  color: var(--muted);
 }
 
 .chat-input button {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: none;
   background: var(--accent);
   color: var(--accent-fg);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: opacity 0.15s;
 }
 
 .chat-input button:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
