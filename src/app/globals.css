@@ -590,13 +590,17 @@ body {
 
 .sql-code {
   margin: 0;
-  padding: 0.75rem;
+  padding: 0.75rem 2.8rem 0.75rem 0.75rem; /* right padding clears the Copy button */
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
-  overflow-x: auto;
+  /* Wrap long lines instead of scrolling sideways, while keeping the query's
+     own line breaks and indentation. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8rem;
+  line-height: 1.5;
   color: #cdd3dd;
 }
 
