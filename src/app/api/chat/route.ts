@@ -16,15 +16,16 @@ import { loadConversation, saveConversation } from "@/lib/persistence/messages";
  * finished conversation is persisted under `conversationId`.
  */
 export async function POST(req: Request) {
-  const { messages, conversationId }: {
+  const { messages, conversationId, provider }: {
     messages: UIMessage[];
     conversationId?: string;
+    provider?: string;
   } = await req.json();
 
   const schema = await describeSchema();
 
   const result = streamText({
-    model: getModel(),
+    model: getModel(provider),
     system: buildSystemPrompt(schema),
     messages: await convertToModelMessages(messages),
     tools: { queryDatabase },

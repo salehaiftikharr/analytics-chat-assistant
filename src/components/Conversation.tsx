@@ -5,28 +5,43 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
+import ModelSwitcher, { type ProviderName } from "./ModelSwitcher";
 
 interface ConversationProps {
   conversationId: string;
   initialMessages: UIMessage[];
   /** Called after an answer finishes (and is saved) so the sidebar can refresh. */
   onPersisted?: () => void;
+  provider: ProviderName;
+  onProviderChange: (provider: ProviderName) => void;
 }
 
 export default function Conversation({
   conversationId,
   initialMessages,
   onPersisted,
+  provider,
+  onProviderChange,
 }: ConversationProps) {
-  // Send the conversation id alongside every request so the server saves under
-  // it. Memoized so we don't rebuild the transport on each render.
+  // The current provider, read at send time so the choice applies to every
+  // request (new messages, example chips, and retries) without rebuilding the
+  // transport.
+  const providerRef = useRef(provider);
+  providerRef.current = provider;
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: { conversationId },
+        prepareSendMessagesRequest: ({ id, messages }) => ({
+          body: {
+            messages,
+            conversationId: id,
+            provider: providerRef.current,
+          },
+        }),
       }),
-    [conversationId],
+    [],
   );
 
   const { messages, sendMessage, status, error, stop, regenerate } = useChat({
@@ -51,6 +66,11 @@ export default function Conversation({
     <div className="chat">
       <header className="chat-header">
         <h1>Analytics Chat Assistant</h1>
+        <ModelSwitcher
+          provider={provider}
+          onChange={onProviderChange}
+          disabled={isBusy}
+        />
       </header>
       <MessageList
         messages={messages}

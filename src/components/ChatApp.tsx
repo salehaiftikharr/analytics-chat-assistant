@@ -5,8 +5,10 @@ import type { UIMessage } from "ai";
 import type { ConversationSummary } from "@/lib/persistence/messages";
 import Sidebar from "./Sidebar";
 import Conversation from "./Conversation";
+import type { ProviderName } from "./ModelSwitcher";
 
 const ACTIVE_KEY = "aca-active-conversation-id";
+const PROVIDER_KEY = "aca-provider";
 
 /**
  * Top-level chat shell: a sidebar of conversations plus the active conversation.
@@ -19,6 +21,7 @@ export default function ChatApp() {
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(
     null,
   );
+  const [provider, setProvider] = useState<ProviderName>("anthropic");
 
   const refreshList = useCallback(async () => {
     try {
@@ -37,8 +40,19 @@ export default function ChatApp() {
       localStorage.setItem(ACTIVE_KEY, id);
     }
     setActiveId(id);
+
+    const savedProvider = localStorage.getItem(PROVIDER_KEY);
+    if (savedProvider === "anthropic" || savedProvider === "openai") {
+      setProvider(savedProvider);
+    }
+
     void refreshList();
   }, [refreshList]);
+
+  const changeProvider = useCallback((next: ProviderName) => {
+    setProvider(next);
+    localStorage.setItem(PROVIDER_KEY, next);
+  }, []);
 
   // Load the active conversation's history whenever it changes.
   useEffect(() => {
@@ -98,6 +112,8 @@ export default function ChatApp() {
             conversationId={activeId}
             initialMessages={initialMessages}
             onPersisted={refreshList}
+            provider={provider}
+            onProviderChange={changeProvider}
           />
         ) : (
           <div className="chat">

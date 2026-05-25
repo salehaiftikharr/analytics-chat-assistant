@@ -3,8 +3,9 @@
 A chat app where users ask natural-language questions about a dataset and get
 back charts and statistics rendered inline. Ask *"What were monthly sales by
 region last year?"* and receive a bar chart plus the underlying numbers, right
-in the conversation. Conversations persist across page reloads, and the LLM
-backend is **switchable between Anthropic and OpenAI** via one env var.
+in the conversation. Conversations are saved and listed in a **sidebar** —
+switch between them, start new ones, or delete — and the LLM backend is
+**switchable between Anthropic and OpenAI** via one env var.
 
 > **Status:** Complete — all 14 build steps are done. See **Getting started**
 > below to run it.
@@ -110,13 +111,13 @@ Confirmed during planning — these shape the build:
 | Piece | Role |
 |-------|------|
 | **Next.js (App Router) + TypeScript** | Full-stack framework. Serves the chat UI (React) *and* hosts the backend API route — one codebase, one deploy. |
-| **API Route (`/api/chat`)** | The brain. Runs `streamText` with the active model + the `queryDatabase` tool, persists the exchange, and streams the result. All trust boundaries live here. |
+| **API Routes (`/api/chat`, `/api/conversations`)** | `/api/chat` runs `streamText` with the active model + the `queryDatabase` tool, streams the result, and persists the exchange. `/api/conversations` lists (GET) and deletes (DELETE) saved chats for the sidebar. All trust boundaries live here. |
 | **Vercel AI SDK (`ai`)** | Provider abstraction + orchestration. `streamText` runs the model with the `queryDatabase` tool and streams text + tool results. One `LanguageModel` interface for every vendor. |
 | **`@ai-sdk/anthropic` / `@ai-sdk/openai`** | Provider packages. `getModel()` returns one or the other based on `LLM_PROVIDER`; everything downstream is identical. |
 | **`@ai-sdk/react` (`useChat`)** | React hook that manages the chat thread, input, and streaming on the client and talks to `/api/chat`. |
 | **PostgreSQL** | Stores **two things**: the analytics dataset (queried read-only) and the app's own `messages` table (read-write). |
 | **`pg` (node-postgres)** | Connection pooling. Two roles: a **read-only role** for LLM-generated SQL, and an **app role** for reading/writing chat history. |
-| **Persistence layer** | Saves each user/assistant message (with parts) to `messages`, and loads history on page load. |
+| **Persistence layer** | Saves/loads each conversation's messages (with parts) in `messages`, and lists/deletes conversations for the sidebar. |
 | **Recharts** | Renders bar/line/area/pie charts inline in the chat from the tool result (rows + chart spec). |
 | **Docker Compose** | Runs Postgres (dev) or Postgres **+ the app** (final) with one command. Seeds the DB from `db/init` on first boot. |
 | **SQL validation layer** | Guards the trust boundary: rejects anything that isn't a single `SELECT`, blocks DDL/DML, enforces `LIMIT`. |
@@ -124,14 +125,15 @@ Confirmed during planning — these shape the build:
 
 ---
 
-## 4. Proposed project structure
+## 4. Project structure
 
 ```
 analytics-chat-assistant/
 ├── README.md                      # this file
 ├── docker-compose.yml             # dev stack: app + Postgres
+├── docker-compose.prod.yml        # production stack: standalone image + Postgres
 ├── Dockerfile.dev                 # dev image: Next.js dev server + hot reload
-├── Dockerfile                     # production image (added near the end)
+├── Dockerfile                     # production image (multi-stage, standalone)
 ├── .dockerignore
 ├── .env.example                   # documented env vars (committed)
 ├── .env.local                     # real secrets (gitignored)
@@ -149,25 +151,32 @@ analytics-chat-assistant/
 └── src/
     ├── app/
     │   ├── layout.tsx
-    │   ├── page.tsx               # the chat page (loads history on mount)
+    │   ├── page.tsx               # renders <ChatApp/>
     │   ├── globals.css
     │   └── api/
-    │       └── chat/
-    │           └── route.ts       # POST: streamText chat | GET: load history
+    │       ├── chat/
+    │       │   └── route.ts       # POST: streamText chat | GET: load one conversation
+    │       └── conversations/
+    │           └── route.ts       # GET: list chats | DELETE: remove a chat
     │
     ├── components/
-    │   ├── ChatWindow.tsx         # uses useChat; renders streamed messages
-    │   ├── MessageList.tsx        # scrollable thread
+    │   ├── ChatApp.tsx            # shell: sidebar + active conversation (active id in localStorage)
+    │   ├── Sidebar.tsx            # conversation list: switch, New chat, delete
+    │   ├── Conversation.tsx       # useChat host for one conversation
+    │   ├── MessageList.tsx        # scrollable thread (text + chart tool results)
     │   ├── MessageInput.tsx       # text box + send button
     │   ├── StatCard.tsx           # single-number / summary stat
     │   └── charts/
     │       ├── ChartRenderer.tsx  # picks the right chart from the spec
+    │       ├── chart-common.tsx   # shared colors / frame / tooltip
     │       ├── BarChartView.tsx
     │       ├── LineChartView.tsx
-    │       └── PieChartView.tsx
+    │       ├── AreaChartView.tsx
+    │       ├── PieChartView.tsx
+    │       └── DataTable.tsx      # fallback for non-chartable results
     │
     ├── lib/
-    │   ├── db.ts                  # pg pools: readOnlyPool + appPool
+    │   ├── db.ts                  # lazy pg pools: getReadOnlyPool + getAppPool
     │   ├── llm/
     │   │   ├── model.ts           # getModel(): LLM_PROVIDER → AI SDK LanguageModel
     │   │   ├── prompt.ts          # system prompt + schema context
@@ -176,7 +185,7 @@ analytics-chat-assistant/
     │   │   ├── validate.ts        # SQL guardrails (SELECT-only, etc.)
     │   │   └── execute.ts         # run validated SQL via readOnlyPool
     │   ├── persistence/
-    │   │   └── messages.ts        # save + load chat history via appPool
+    │   │   └── messages.ts        # save/load/list/delete conversations via the app pool
     │   └── schema/
     │       └── describe.ts        # produce analytics-schema text for the LLM
     │
@@ -218,12 +227,23 @@ Persistence needs *write* access; LLM-generated SQL must never have it. So:
 
 Even a query that slips past validation cannot write, drop, or touch `messages`.
 
+### Multiple conversations (the sidebar)
+
+Chats are grouped by a `conversation_id` (a UUID kept in `localStorage`, so a
+reload reopens the last chat). **`ChatApp`** is the shell: it loads the list from
+`GET /api/conversations`, fetches the active chat's history, and renders
+**`Sidebar`** (switch, New chat, delete) beside the active **`Conversation`**
+(the `useChat` host, keyed by id so switching remounts it). Each chat's title is
+its first question; `DELETE /api/conversations?conversationId=…` removes one. The
+list refreshes after each answer (the `Conversation` calls back on completion).
+
 ---
 
 ## 5. The request lifecycle (one question, end to end)
 
-1. On mount, **`ChatWindow`** loads prior messages (`GET /api/chat`, via
-   `persistence/messages.ts`) and seeds `useChat`'s initial messages.
+1. On mount, **`ChatApp`** loads the conversation list (`GET /api/conversations`)
+   for the sidebar and the active chat's prior messages (`GET /api/chat`),
+   seeding `useChat`'s initial messages.
 2. The user submits a question; **`useChat`** streams the thread to
    `POST /api/chat`.
 3. **`route.ts`** builds the system prompt from `schema/describe.ts` and calls
@@ -281,6 +301,14 @@ Each step is independently runnable/verifiable. **All 14 steps are complete.**
     clean checkout, Docker-only, `docker compose up` serves the app.
 14. **Polish & docs.** Loading/streaming indicators, styling, finalize this
     README with run instructions for dev and Docker modes.
+
+### Beyond the plan: multi-conversation sidebar
+
+After the 14 steps, a sidebar was added so you can keep multiple chats, switch
+between them, start new ones, and delete them. This split the single-chat
+`ChatWindow` (steps 4 & 10) into **`ChatApp`** (shell) + **`Sidebar`** +
+**`Conversation`**, and added the `GET`/`DELETE` `/api/conversations` endpoint —
+see §4 "Multiple conversations (the sidebar)".
 
 ---
 

@@ -28,6 +28,7 @@ type UIPart = {
   type: string;
   text?: string;
   state?: string;
+  input?: { sql?: string };
   output?: unknown;
   errorText?: string;
 };
@@ -72,6 +73,9 @@ export default function MessageList({
           key={message.id || index}
           className={`chat-message chat-message--${message.role}`}
         >
+          <div className="chat-role">
+            {message.role === "user" ? "You" : "Assistant"}
+          </div>
           <div className="chat-bubble">
             {(message.parts as unknown as UIPart[]).map((part, i) => {
               if (part.type === "text") {
@@ -88,6 +92,7 @@ export default function MessageList({
 
       {pending ? (
         <div className="chat-message chat-message--assistant">
+          <div className="chat-role">Assistant</div>
           <div className="chat-bubble chat-typing" aria-label="Assistant is thinking">
             <span />
             <span />
@@ -106,9 +111,16 @@ export default function MessageList({
 function ToolResult({ part }: { part: UIPart }) {
   if (part.state === "output-available") {
     const output = part.output as QueryOutput;
+    const sql = part.input?.sql;
     return (
       <div className="tool-result">
         <ChartRenderer chartSpec={output.chartSpec} rows={output.rows} />
+        {sql ? (
+          <details className="sql-details">
+            <summary>View SQL</summary>
+            <pre className="sql-code">{sql}</pre>
+          </details>
+        ) : null}
       </div>
     );
   }
