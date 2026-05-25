@@ -82,8 +82,9 @@ export default function Conversation({
       <MessageList
         messages={messages}
         pending={status === "submitted"}
+        busy={isBusy}
         error={error}
-        onExample={ask}
+        onAsk={ask}
       />
       {(isBusy || status === "error") && (
         <div className="chat-controls">

@@ -47,3 +47,24 @@ export const queryDatabase = tool({
     return { rowCount, rows, chartSpec };
   },
 });
+
+/**
+ * A UI-only tool: the model proposes 2–4 short follow-up questions, which the
+ * client renders as clickable chips so the user can drill in further with one
+ * click. There's no data work — `execute` just echoes the suggestions back so
+ * they become a tool-result part the UI can render (and persistence saves).
+ */
+export const suggestFollowups = tool({
+  description:
+    "Offer 2 to 4 short, specific follow-up questions the user is likely to ask next, shown as clickable chips. Call this once at the very end, after you have answered, to help the user explore further.",
+  inputSchema: z.object({
+    suggestions: z
+      .array(z.string())
+      .min(2)
+      .max(4)
+      .describe(
+        "Short, specific follow-up questions (≈8 words or fewer each), phrased as the user would ask them.",
+      ),
+  }),
+  execute: async ({ suggestions }) => ({ suggestions }),
+});

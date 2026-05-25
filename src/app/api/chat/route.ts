@@ -6,7 +6,7 @@ import {
 } from "ai";
 import { getModel } from "@/lib/llm/model";
 import { buildSystemPrompt } from "@/lib/llm/prompt";
-import { queryDatabase } from "@/lib/llm/tools";
+import { queryDatabase, suggestFollowups } from "@/lib/llm/tools";
 import { describeSchema } from "@/lib/schema/describe";
 import { loadConversation, saveConversation } from "@/lib/persistence/messages";
 
@@ -28,8 +28,8 @@ export async function POST(req: Request) {
     model: getModel(provider),
     system: buildSystemPrompt(schema),
     messages: await convertToModelMessages(messages),
-    tools: { queryDatabase },
-    stopWhen: stepCountIs(5),
+    tools: { queryDatabase, suggestFollowups },
+    stopWhen: stepCountIs(6),
   });
 
   return result.toUIMessageStreamResponse({

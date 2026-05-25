@@ -11,6 +11,7 @@ How to answer:
 - Call the queryDatabase tool with (a) a single read-only SELECT and (b) a chartSpec describing how to visualize the result.
 - After the tool returns rows, write a concise one- or two-sentence answer. Do NOT paste the raw rows into your text — the rows and chart are rendered for the user automatically.
 - If the tool returns an error, read it, fix the SQL, and call the tool again.
+- Finally, call the suggestFollowups tool with 2 to 4 short, specific next questions that build on what you just showed (e.g. break down by another dimension, change the time range, or drill into a top result). This is the last thing you do.
 
 Rules for the SQL:
 - Exactly ONE read-only SELECT. Never use INSERT, UPDATE, DELETE, or any DDL, and never use multiple statements or semicolons.

@@ -10,8 +10,11 @@ interface MessageListProps {
   messages: UIMessage[];
   /** True while waiting for the assistant to start responding. */
   pending?: boolean;
+  /** True while a request is in flight (disables follow-up chips). */
+  busy?: boolean;
   error?: Error;
-  onExample?: (question: string) => void;
+  /** Send a question (used by the empty-state examples and follow-up chips). */
+  onAsk?: (question: string) => void;
 }
 
 const EXAMPLES = [
@@ -22,6 +25,9 @@ const EXAMPLES = [
 
 /** The shape of our queryDatabase tool result (part.output when available). */
 type QueryOutput = { rowCount: number; rows: Row[]; chartSpec: ChartSpec };
+
+/** The shape of our suggestFollowups tool result. */
+type FollowupOutput = { suggestions: string[] };
 
 /** Permissive view of a UIMessage part (the SDK's part union is heavily generic). */
 type UIPart = {
@@ -36,8 +42,9 @@ type UIPart = {
 export default function MessageList({
   messages,
   pending,
+  busy,
   error,
-  onExample,
+  onAsk,
 }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -53,13 +60,13 @@ export default function MessageList({
           <p className="chat-empty-hint">
             Ask a question about your e-commerce data.
           </p>
-          <div className="chat-examples">
+          <div className="chat-chips">
             {EXAMPLES.map((question) => (
               <button
                 key={question}
                 type="button"
-                className="chat-example"
-                onClick={() => onExample?.(question)}
+                className="chip"
+                onClick={() => onAsk?.(question)}
               >
                 {question}
               </button>
@@ -68,27 +75,52 @@ export default function MessageList({
         </div>
       ) : null}
 
-      {messages.map((message, index) => (
-        <div
-          key={message.id || index}
-          className={`chat-message chat-message--${message.role}`}
-        >
-          <div className="chat-role">
-            {message.role === "user" ? "You" : "Assistant"}
+      {messages.map((message, index) => {
+        const parts = message.parts as unknown as UIPart[];
+        // Follow-up chips render below the bubble, not inside it.
+        const followups = parts
+          .filter(
+            (p) => p.type === "tool-suggestFollowups" && p.state === "output-available",
+          )
+          .flatMap((p) => (p.output as FollowupOutput).suggestions);
+
+        return (
+          <div
+            key={message.id || index}
+            className={`chat-message chat-message--${message.role}`}
+          >
+            <div className="chat-role">
+              {message.role === "user" ? "You" : "Assistant"}
+            </div>
+            <div className="chat-bubble">
+              {parts.map((part, i) => {
+                if (part.type === "text") {
+                  return <span key={i}>{part.text}</span>;
+                }
+                if (part.type === "tool-queryDatabase") {
+                  return <ToolResult key={i} part={part} />;
+                }
+                return null;
+              })}
+            </div>
+            {followups.length > 0 ? (
+              <div className="followups">
+                {followups.map((q, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="chip"
+                    disabled={busy}
+                    onClick={() => onAsk?.(q)}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
-          <div className="chat-bubble">
-            {(message.parts as unknown as UIPart[]).map((part, i) => {
-              if (part.type === "text") {
-                return <span key={i}>{part.text}</span>;
-              }
-              if (part.type === "tool-queryDatabase") {
-                return <ToolResult key={i} part={part} />;
-              }
-              return null;
-            })}
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       {pending ? (
         <div className="chat-message chat-message--assistant">

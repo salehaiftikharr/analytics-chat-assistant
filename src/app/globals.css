@@ -342,29 +342,44 @@ body {
   max-width: 28rem;
 }
 
-.chat-examples {
+.chat-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: center;
 }
 
-.chat-example {
-  padding: 0.5rem 0.85rem;
+/* Clickable suggestion chip — shared by the empty-state examples and the
+   assistant's inline follow-up suggestions. */
+.chip {
+  padding: 0.45rem 0.8rem;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--fg);
-  font-size: 0.85rem;
+  font-size: 0.83rem;
   cursor: pointer;
   transition:
     border-color 0.15s,
     background 0.15s;
 }
 
-.chat-example:hover {
+.chip:hover {
   border-color: var(--accent);
   background: var(--panel-3);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Assistant-rendered follow-up suggestions, below the answer bubble. */
+.followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
 }
 
 /* ── Typing indicator ────────────────────────────────────────────────────── */
