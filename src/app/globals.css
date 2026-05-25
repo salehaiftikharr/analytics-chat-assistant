@@ -68,6 +68,7 @@ body {
   border-right: 1px solid var(--border);
   background: var(--panel);
   overflow: hidden;
+  transition: width 0.2s ease;
 }
 
 .sidebar-new {
@@ -153,10 +154,51 @@ body {
   color: var(--danger);
 }
 
+/* Collapse the sidebar (desktop): slide it out and reclaim the space. */
+.app--sidebar-collapsed .sidebar {
+  width: 0;
+  border-right: none;
+}
+
+/* Backdrop only matters on narrow screens (see media query below). */
+.sidebar-backdrop {
+  display: none;
+}
+
 .app-main {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+}
+
+/* ── Icon button (header) ────────────────────────────────────────────────── */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.icon-button:hover {
+  background: var(--panel-2);
+  color: var(--fg);
+}
+
+.chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
 }
 
 /* ── Chat column ─────────────────────────────────────────────────────────── */
@@ -479,8 +521,31 @@ body {
   color: var(--fg);
 }
 
+.sql-block {
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.sql-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.sql-copy:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
 .sql-code {
-  margin: 0.5rem 0 0;
+  margin: 0;
   padding: 0.75rem;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -543,4 +608,47 @@ body {
 
 .data-table tr:last-child td {
   border-bottom: none;
+}
+
+/* ── Responsive: sidebar becomes an overlay on narrow screens ────────────── */
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 30;
+    width: 264px;
+    box-shadow: var(--shadow);
+  }
+
+  /* When collapsed on mobile, slide the sidebar fully off-screen. */
+  .app--sidebar-collapsed .sidebar {
+    width: 264px;
+    transform: translateX(-100%);
+    border-right: 1px solid var(--border);
+  }
+
+  .sidebar {
+    transition:
+      transform 0.2s ease,
+      width 0.2s ease;
+  }
+
+  /* Backdrop shows when the sidebar is open (not collapsed). */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .app--sidebar-collapsed .sidebar-backdrop {
+    display: none;
+  }
+
+  .chat-header {
+    padding-left: 0.85rem;
+  }
 }

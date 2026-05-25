@@ -6,9 +6,9 @@ import { ResponsiveContainer } from "recharts";
 /** Row shape coming from a query result. */
 export type Row = Record<string, unknown>;
 
-/** Series colors, reused across chart types. */
+/** Series colors, reused across chart types (matches the app accent palette). */
 export const CHART_COLORS = [
-  "#4f8cff",
+  "#5b8cff",
   "#34d399",
   "#f59e0b",
   "#f472b6",
@@ -16,18 +16,19 @@ export const CHART_COLORS = [
   "#22d3ee",
 ];
 
-export const AXIS_TICK = { fill: "#9aa3ad", fontSize: 12 } as const;
-export const GRID_STROKE = "#2a2f3a";
+// Kept in sync with the theme tokens in globals.css (--muted / --border / --fg).
+export const AXIS_TICK = { fill: "#8b93a1", fontSize: 12 } as const;
+export const GRID_STROKE = "#232834";
 
 /** Dark-theme tooltip props, spread onto <Tooltip />. */
 export const TOOLTIP_STYLE = {
   contentStyle: {
-    background: "#1f242d",
-    border: "1px solid #2a2f3a",
+    background: "#181c25",
+    border: "1px solid #232834",
     borderRadius: 8,
-    color: "#e6e8eb",
+    color: "#e8eaed",
   },
-  labelStyle: { color: "#9aa3ad" },
+  labelStyle: { color: "#8b93a1" },
 } as const;
 
 /** Title + responsive, fixed-height canvas wrapper for any chart. */

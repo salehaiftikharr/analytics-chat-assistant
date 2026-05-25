@@ -18,10 +18,15 @@ const PROVIDER_KEY = "aca-provider";
 export default function ChatApp() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(
-    null,
-  );
+  // The loaded conversation, tagged with its id. When `loaded.id !== activeId`
+  // we're still fetching the active chat — that derived check replaces a
+  // separate "loading" state (and avoids a synchronous reset in the effect).
+  const [loaded, setLoaded] = useState<{
+    id: string;
+    messages: UIMessage[];
+  } | null>(null);
   const [provider, setProvider] = useState<ProviderName>("anthropic");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const refreshList = useCallback(async () => {
     try {
@@ -34,6 +39,11 @@ export default function ChatApp() {
 
   // On mount: resolve the active conversation (last used, or a new one) + list.
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect --
+       One-time client-only initialization. activeId/provider/sidebar are derived
+       from localStorage and window, which aren't available during SSR (nor in a
+       lazy useState initializer without a hydration mismatch), so they must be
+       set in a mount effect. This is a single intentional render, not a cascade. */
     let id = localStorage.getItem(ACTIVE_KEY);
     if (!id) {
       id = crypto.randomUUID();
@@ -46,6 +56,10 @@ export default function ChatApp() {
       setProvider(savedProvider);
     }
 
+    // Start with the sidebar collapsed on narrow screens (it's an overlay there).
+    if (window.innerWidth < 768) setSidebarOpen(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
+
     void refreshList();
   }, [refreshList]);
 
@@ -54,26 +68,46 @@ export default function ChatApp() {
     localStorage.setItem(PROVIDER_KEY, next);
   }, []);
 
-  // Load the active conversation's history whenever it changes.
+  // Load the active conversation's history whenever it changes. setState happens
+  // only in the async callback (after the fetch resolves), which is the
+  // recommended place — no synchronous reset in the effect body.
   useEffect(() => {
     if (!activeId) return;
-    setInitialMessages(null);
+    let cancelled = false;
+    const settle = (messages: UIMessage[]) => {
+      if (!cancelled) setLoaded({ id: activeId, messages });
+    };
     fetch(`/api/chat?conversationId=${activeId}`)
       .then((res) => (res.ok ? res.json() : []))
-      .then((msgs: UIMessage[]) => setInitialMessages(msgs))
-      .catch(() => setInitialMessages([]));
+      .then((msgs: UIMessage[]) => settle(msgs))
+      .catch(() => settle([]));
+    return () => {
+      cancelled = true;
+    };
   }, [activeId]);
 
-  const selectConversation = useCallback((id: string) => {
-    localStorage.setItem(ACTIVE_KEY, id);
-    setActiveId(id);
+  // On narrow screens the sidebar is an overlay; close it after picking a chat.
+  const closeSidebarIfNarrow = useCallback(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
   }, []);
+
+  const selectConversation = useCallback(
+    (id: string) => {
+      localStorage.setItem(ACTIVE_KEY, id);
+      setActiveId(id);
+      closeSidebarIfNarrow();
+    },
+    [closeSidebarIfNarrow],
+  );
 
   const newConversation = useCallback(() => {
     const id = crypto.randomUUID();
     localStorage.setItem(ACTIVE_KEY, id);
     setActiveId(id);
-  }, []);
+    closeSidebarIfNarrow();
+  }, [closeSidebarIfNarrow]);
 
   const deleteConversation = useCallback(
     async (id: string) => {
@@ -97,7 +131,7 @@ export default function ChatApp() {
   );
 
   return (
-    <div className="app">
+    <div className={`app${sidebarOpen ? "" : " app--sidebar-collapsed"}`}>
       <Sidebar
         conversations={conversations}
         activeId={activeId}
@@ -105,15 +139,22 @@ export default function ChatApp() {
         onNew={newConversation}
         onDelete={deleteConversation}
       />
+      {/* Click-away backdrop for the overlay sidebar on narrow screens. */}
+      <div
+        className="sidebar-backdrop"
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
       <div className="app-main">
-        {activeId && initialMessages !== null ? (
+        {activeId && loaded?.id === activeId ? (
           <Conversation
             key={activeId}
             conversationId={activeId}
-            initialMessages={initialMessages}
+            initialMessages={loaded.messages}
             onPersisted={refreshList}
             provider={provider}
             onProviderChange={changeProvider}
+            onToggleSidebar={() => setSidebarOpen((open) => !open)}
           />
         ) : (
           <div className="chat">

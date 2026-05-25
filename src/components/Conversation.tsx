@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import MessageList from "./MessageList";
@@ -14,6 +14,7 @@ interface ConversationProps {
   onPersisted?: () => void;
   provider: ProviderName;
   onProviderChange: (provider: ProviderName) => void;
+  onToggleSidebar?: () => void;
 }
 
 export default function Conversation({
@@ -22,26 +23,14 @@ export default function Conversation({
   onPersisted,
   provider,
   onProviderChange,
+  onToggleSidebar,
 }: ConversationProps) {
-  // The current provider, read at send time so the choice applies to every
-  // request (new messages, example chips, and retries) without rebuilding the
-  // transport.
-  const providerRef = useRef(provider);
-  providerRef.current = provider;
-
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        prepareSendMessagesRequest: ({ id, messages }) => ({
-          body: {
-            messages,
-            conversationId: id,
-            provider: providerRef.current,
-          },
-        }),
-      }),
-    [],
+  // Create the transport once (stable identity) so re-renders never reset the
+  // thread. Per-request fields (conversationId, provider) are supplied at send
+  // time via each sendMessage/regenerate call's `body`, so the transport itself
+  // needs no changing state.
+  const [transport] = useState(
+    () => new DefaultChatTransport({ api: "/api/chat" }),
   );
 
   const { messages, sendMessage, status, error, stop, regenerate } = useChat({
@@ -51,6 +40,12 @@ export default function Conversation({
   });
 
   const isBusy = status === "submitted" || status === "streaming";
+
+  // The body sent with every request: which conversation to save under, and
+  // which provider to use (the current switch value).
+  const requestBody = { conversationId, provider };
+
+  const ask = (text: string) => sendMessage({ text }, { body: requestBody });
 
   // When a response finishes (streaming -> ready), the server has persisted the
   // conversation; tell the parent so the sidebar list/title updates.
@@ -65,7 +60,19 @@ export default function Conversation({
   return (
     <div className="chat">
       <header className="chat-header">
-        <h1>Analytics Chat Assistant</h1>
+        <div className="chat-header-left">
+          {onToggleSidebar ? (
+            <button
+              type="button"
+              className="icon-button sidebar-toggle"
+              aria-label="Toggle sidebar"
+              onClick={onToggleSidebar}
+            >
+              ☰
+            </button>
+          ) : null}
+          <h1>Analytics Chat Assistant</h1>
+        </div>
         <ModelSwitcher
           provider={provider}
           onChange={onProviderChange}
@@ -76,7 +83,7 @@ export default function Conversation({
         messages={messages}
         pending={status === "submitted"}
         error={error}
-        onExample={(question) => sendMessage({ text: question })}
+        onExample={ask}
       />
       {(isBusy || status === "error") && (
         <div className="chat-controls">
@@ -89,14 +96,14 @@ export default function Conversation({
             <button
               type="button"
               className="chat-control"
-              onClick={() => regenerate()}
+              onClick={() => regenerate({ body: requestBody })}
             >
               Retry
             </button>
           )}
         </div>
       )}
-      <MessageInput onSend={(text) => sendMessage({ text })} disabled={isBusy} />
+      <MessageInput onSend={ask} disabled={isBusy} />
     </div>
   );
 }

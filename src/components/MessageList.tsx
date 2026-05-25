@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import type { ChartSpec } from "@/lib/llm/tools";
@@ -115,12 +115,7 @@ function ToolResult({ part }: { part: UIPart }) {
     return (
       <div className="tool-result">
         <ChartRenderer chartSpec={output.chartSpec} rows={output.rows} />
-        {sql ? (
-          <details className="sql-details">
-            <summary>View SQL</summary>
-            <pre className="sql-code">{sql}</pre>
-          </details>
-        ) : null}
+        {sql ? <SqlDisclosure sql={sql} /> : null}
       </div>
     );
   }
@@ -128,4 +123,30 @@ function ToolResult({ part }: { part: UIPart }) {
     return <p className="chart-empty">Query failed: {part.errorText}</p>;
   }
   return <p className="chart-empty">Running query…</p>;
+}
+
+function SqlDisclosure({ sql }: { sql: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard may be unavailable; ignore */
+    }
+  }
+
+  return (
+    <details className="sql-details">
+      <summary>View SQL</summary>
+      <div className="sql-block">
+        <button type="button" className="sql-copy" onClick={copy}>
+          {copied ? "Copied" : "Copy"}
+        </button>
+        <pre className="sql-code">{sql}</pre>
+      </div>
+    </details>
+  );
 }
